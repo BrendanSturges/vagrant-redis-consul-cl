@@ -1,71 +1,84 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
-# All Vagrant configuration is done below. The "2" in Vagrant.configure
-# configures the configuration version (we support older styles for
-# backwards compatibility). Please don't change it unless you know what
-# you're doing.
-Vagrant.configure("2") do |config|
-  # The most common configuration options are documented and commented below.
-  # For a complete reference, please see the online documentation at
-  # https://docs.vagrantup.com.
+$script = <<SCRIPT
 
-  # Every Vagrant development environment requires a box. You can search for
-  # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = "base"
+echo "Installing common dependencies ..."
+sudo apt-get update
 
-  # Disable automatic box update checking. If you disable this, then
-  # boxes will only be checked for updates when the user runs
-  # `vagrant box outdated`. This is not recommended.
-  # config.vm.box_check_update = false
+echo "Installing consul dependencies ..."
+sudo apt-get install -y unzip curl
 
-  # Create a forwarded port mapping which allows access to a specific port
-  # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
+echo "Installing redis dependencies ..."
+sudo apt-get install build-essential tcl
 
-  # Create a private network, which allows host-only access to the machine
-  # using a specific IP.
-  # config.vm.network "private_network", ip: "192.168.33.10"
+echo "Fetching Consul version 0.7.3 ..."
+cd /tmp/
+curl -s https://releases.hashicorp.com/consul/0.7.3/consul_0.7.3_linux_amd64.zip -o consul.zip
 
-  # Create a public network, which generally matched to bridged network.
-  # Bridged networks make the machine appear as another physical device on
-  # your network.
-  # config.vm.network "public_network"
+echo "Fetching Redis stable ..."
+curl -O http://download.redis.io/redis-stable.tar.gz
 
-  # Share an additional folder to the guest VM. The first argument is
-  # the path on the host to the actual folder. The second argument is
-  # the path on the guest to mount the folder. And the optional third
-  # argument is a set of non-required options.
-  # config.vm.synced_folder "../data", "/vagrant_data"
+echo "Installing Consul version 0.7.3 ..."
+unzip consul.zip
+sudo chmod +x consul
+sudo mv consul /usr/bin/consul
 
-  # Provider-specific configuration so you can fine-tune various
-  # backing providers for Vagrant. These expose provider-specific options.
-  # Example for VirtualBox:
-  #
-  # config.vm.provider "virtualbox" do |vb|
-  #   # Display the VirtualBox GUI when booting the machine
-  #   vb.gui = true
-  #
-  #   # Customize the amount of memory on the VM:
-  #   vb.memory = "1024"
-  # end
-  #
-  # View the documentation for the provider you are using for more
-  # information on available options.
+sudo mkdir /etc/consul.d
+sudo chmod a+w /etc/consul.d
 
-  # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
-  # such as FTP and Heroku are also available. See the documentation at
-  # https://docs.vagrantup.com/v2/push/atlas.html for more information.
-  # config.push.define "atlas" do |push|
-  #   push.app = "YOUR_ATLAS_USERNAME/YOUR_APPLICATION_NAME"
-  # end
+SCRIPT
 
-  # Enable provisioning with a shell script. Additional provisioners such as
-  # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
-  # documentation for more information about their specific syntax and use.
-  # config.vm.provision "shell", inline: <<-SHELL
-  #   apt-get update
-  #   apt-get install -y apache2
-  # SHELL
+# Specify a Consul version
+CONSUL_VERSION = ENV['0.7.3'] || "0.7.3"
+
+# Specify a custom Vagrant box for the demo
+BOX_NAME = ENV['BOX_NAME'] || "debian/jessie64"
+
+# Vagrantfile API/syntax version.
+# NB: Don't touch unless you know what you're doing!
+VAGRANTFILE_API_VERSION = "2"
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+  config.vm.box = BOX_NAME
+
+  config.vm.provision "shell",
+                          inline: $script,
+                          env: {'CONSUL_VERSION' => CONSUL_VERSION}
+
+  config.vm.define "s1" do |s1|
+      s1.vm.hostname = "s1"
+      s1.vm.network "private_network", ip: "172.20.20.10"
+  end
+
+  config.vm.define "s2" do |s2|
+      s2.vm.hostname = "s2"
+      s2.vm.network "private_network", ip: "172.20.20.11"
+  end
+
+  config.vm.define "s3" do |s3|
+     s3.vm.hostname = "s3"
+     s3.vm.network "private_network", ip: "172.20.20.12"
+  end
 end
+
+echo "Installing Redis ..."
+tar xzvf redis-stable.tar.gz
+cd redis-stable
+make
+make install
+
+echo "Configuring redis ..."
+rm /etc/redis.conf
+mkdir -p /etc/redis
+mkdir /var/redis
+chmod -R 777 /var/redis
+useradd redis
+
+cp -u /vagrant/redis.conf /etc/redis/6379.conf
+cp -u /vagrant/redis.init.d /etc/init.d/redis_6379
+
+update-rc.d redis_6378 defaults
+
+chmod a+x /etc/init.d/redis_6379
+/etc/init.d/redis_6379 start
