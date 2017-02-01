@@ -82,3 +82,13 @@ update-rc.d redis_6378 defaults
 
 chmod a+x /etc/init.d/redis_6379
 /etc/init.d/redis_6379 start
+
+echo "Joining consul to cluster ..."
+vagrant ssh s2
+consul join 172.20.20.10
+exit
+
+vagrant ssh s3
+consul join 172.20.20.11
+exit
+
